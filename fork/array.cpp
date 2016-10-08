@@ -14,18 +14,19 @@ using namespace std;
 const int NUM = 10;     // number of processes to fork
 const int DEPTH = 50;   // depth of the Fibonacci sequence
 
-int fib(int n) {
-    if (n == 0 or n == 1) return 1;
-    else                  return fib(n - 1) + fib(n - 2);
-}
-
 int main() {
+    int seq[DEPTH];         // an array to store the Fib seq
+                            // this may need to be changed to a linked list based stack
     clock_t start, end;     // variable to record the start and end time
     pid_t pid;              // process id
 
-    ofstream file ("/Users/kai/Turing/exps/aistats2017/fork/recursion.csv");
+    ofstream file ("/Users/kai/Turing/exps/aistats2017/fork/array.csv");
 
     for (int n = 0; n < DEPTH; n++) {
+
+        // Compute the Fibonacci sequence
+        if (n == 0 or n == 1) seq[n] = 1;
+        else                  seq[n] = seq[n - 1] + seq[n - 2];
 
         // Fork a batch of processes
         for (int ith = 0; ith < NUM; ith++) {
@@ -45,6 +46,7 @@ int main() {
         }
         file << endl;           // line break
     }
+
 
     file.close();               // close the CSV file
     return 0;
