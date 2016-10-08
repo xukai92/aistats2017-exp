@@ -20,7 +20,7 @@ int main() {
     clock_t start, end;     // variable to record the start and end time
     pid_t pid;              // process id
 
-    ofstream file ("/Users/kai/Turing/exps/aistats2017/fork/array.csv");
+    ofstream file ("/Users/kai/Turing/exps/aistats2017/exp2/fork/array.csv");
 
     for (int n = 0; n < DEPTH; n++) {
 
