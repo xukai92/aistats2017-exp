@@ -18,8 +18,11 @@
 #include "probabilistic.h"
 #include "engine-shared.h"
 
+// Profiling
+clock_t start, end;
+FILE *fp;
 
-// Set defaults for number of particles 
+// Set defaults for number of particles
 static int NUM_PARTICLES = 100;
 
 // We can print out an estimate of the marginal likelihood, as we run SMC
@@ -31,7 +34,7 @@ static double TAU = 0.5;
 // Possibly default initial seed
 static long INITIAL_SEED = -1;
 
-// Flag to mark whether or not to record walltime 
+// Flag to mark whether or not to record walltime
 static bool TIME_EXECUTION = false;
 
 // Flag to mark whether to output weighted or unweighted particle set
@@ -40,7 +43,7 @@ static bool WEIGHTED_OUTPUT = false;
 
 /**
  * Struct containing global (shared) state variables
- * 
+ *
  */
 typedef struct {
 
@@ -49,34 +52,34 @@ typedef struct {
     int *n_offspring;
 
     int current_observe;
-    
+
     // Synchronization state
 
     // Barrier: all particles have reached an observe
     int begin_observe_counter;
     pthread_mutex_t begin_observe_mutex;
     pthread_cond_t begin_observe_cond;
-    
+
     // Barrier: all particles have completed an observe
     int end_observe_counter;
     pthread_mutex_t end_observe_mutex;
     pthread_cond_t end_observe_cond;
-    
+
     // Barrier: all particles completed program execution
     int exec_complete_counter;
     pthread_mutex_t exec_complete_mutex;
     pthread_cond_t exec_complete_cond;
-    
+
     // Mutex: stdout lock
     pthread_mutex_t stdout_mutex;
-    
+
     // Mutex: particle id
     int particle_id;
     pthread_mutex_t particle_id_mutex;
-    
+
     // Marginal likelihood estimate
     double log_marginal_likelihood;
-    
+
 } shared_globals;
 
 /**
@@ -131,7 +134,7 @@ void multinomial_resample() {
     for (int i=0; i<NUM_PARTICLES; i++) { fprintf(stderr, "%d ", globals->n_offspring[i]); }
     fprintf(stderr, ">\n");
 #endif
-        
+
     free(sampling_dist);
 }
 
@@ -173,7 +176,7 @@ void residual_resample() {
     for (int i=0; i<NUM_PARTICLES; i++) { fprintf(stderr, "%d ", globals->n_offspring[i]); }
     fprintf(stderr, ">\n");
 #endif
-        
+
     free(sampling_dist);
 }
 
@@ -194,7 +197,7 @@ void destroy_particle() {
 /**
  * Special printf function which writes to the output file.
  *
- */ 
+ */
 void predict(const char *format, ...) {
     va_list args;
     va_start(args, format);
@@ -205,7 +208,7 @@ void predict(const char *format, ...) {
 /**
  * Special printf function "predict", for named doubles
  *
- */ 
+ */
 void predict_value(const char *name, const double value) {
     // generate "predict" queries, given name and value.
     utstring_printf(locals->predict,"%s,%f\n", name, value);
@@ -216,7 +219,7 @@ void weight_trace(const double ln_p, const bool synchronize) {
     // Accumulate overall log-likelihood
     locals->log_likelihood += ln_p;
 
-    // If this isn't a synchronizing observe, we accumulate log probability 
+    // If this isn't a synchronizing observe, we accumulate log probability
     // and continue normal program execution.
     if (!synchronize) {
         locals->log_weight += ln_p;
@@ -232,7 +235,7 @@ void weight_trace(const double ln_p, const bool synchronize) {
     locals->log_weight += ln_p;
     globals->log_weights[shared_globals_index] = locals->log_weight;
     globals->begin_observe_counter += 1;
-    debug_print(3, "Incrementing observe counter %d to one higher than global observe counter %d [index %d, %d]\n", locals->current_observe, globals->current_observe, shared_globals_index, getpid()); 
+    debug_print(3, "Incrementing observe counter %d to one higher than global observe counter %d [index %d, %d]\n", locals->current_observe, globals->current_observe, shared_globals_index, getpid());
     locals->current_observe += 1;
 
     debug_print(4,"[OBSERVE %d, %d] #%d, %0.4f\n", locals->current_observe, getpid(), globals->begin_observe_counter, ln_p);
@@ -289,7 +292,7 @@ void weight_trace(const double ln_p, const bool synchronize) {
         pthread_cond_broadcast(&globals->begin_observe_cond);
     } else {
         debug_print(4,"%d: observed %d of %d particles, waiting...\n", getpid(), globals->begin_observe_counter, particles_to_count);
-        // This *looks* strange, but the begin_observe_counter is incremented every 
+        // This *looks* strange, but the begin_observe_counter is incremented every
         // time this function is called, and then reset to zero before broadcast().
         debug_print(3,"[wait begin_observe %d %d] observe barrier counter = %d (pid %d)\n", locals->current_observe, globals->current_observe, globals->begin_observe_counter, getpid());
         while (globals->begin_observe_counter != 0) {
@@ -298,7 +301,7 @@ void weight_trace(const double ln_p, const bool synchronize) {
         }
     }
     pthread_mutex_unlock(&(globals->begin_observe_mutex));
-    debug_print(2, "Mutex released, asserting local %d == global %d [index %d, %d]\n", locals->current_observe, globals->current_observe, shared_globals_index, getpid()); 
+    debug_print(2, "Mutex released, asserting local %d == global %d [index %d, %d]\n", locals->current_observe, globals->current_observe, shared_globals_index, getpid());
     assert(locals->current_observe == globals->current_observe);
     locals->log_weight = globals->log_weights[shared_globals_index];
 
@@ -336,7 +339,7 @@ void weight_trace(const double ln_p, const bool synchronize) {
             }
         }
     }
-    
+
     pthread_mutex_lock(&globals->end_observe_mutex);
     globals->end_observe_counter--;
     debug_print(2, "%d particles remaining [index %d, %d]\n", globals->end_observe_counter, shared_globals_index, getpid());
@@ -365,14 +368,14 @@ void init_globals() {
     globals = (shared_globals *)shared_memory_alloc(sizeof(shared_globals));
     globals->log_weights = (double *)shared_memory_alloc(NUM_PARTICLES*sizeof(double));
     globals->n_offspring = (int *)shared_memory_alloc(NUM_PARTICLES*sizeof(int));
-    
+
     // Initialize process locks
     init_shared_mutex(&globals->exec_complete_mutex, &globals->exec_complete_cond);
     init_shared_mutex(&globals->begin_observe_mutex, &globals->begin_observe_cond);
     init_shared_mutex(&globals->end_observe_mutex, &globals->end_observe_cond);
     init_shared_mutex(&globals->stdout_mutex, NULL);
     init_shared_mutex(&globals->particle_id_mutex, NULL);
-    
+
     // Initialize globals
     globals->begin_observe_counter = 0;
     globals->exec_complete_counter = 0;
@@ -387,10 +390,12 @@ void init_globals() {
  *
  */
 int infer(int (*f)(int, char**), int argc, char **argv) {
-    
+
+fp = fopen("/Users/kai/Turing/exps/aistats2017/exp1/probc/fork.csv", "w");
+
     pid_t main_pid = getpid();
     debug_print(1, "Main process pid: %d\n", main_pid);
-    
+
     // Initialize random number generators
     erp_rng_init();
     if (INITIAL_SEED >= 0) set_rng_seed(INITIAL_SEED);
@@ -423,13 +428,15 @@ int infer(int (*f)(int, char**), int argc, char **argv) {
     globals->current_observe = 0;
 
     globals->exec_complete_counter = 0;
-    
+
     for (int i=0; i<NUM_PARTICLES; i++) {
         // We need to set each particle with a distinct random number seed
         unsigned long int seed = gen_new_rng_seed();
 
         // Fork and run
+        start = clock();
         pid_t child_pid = fork();
+        end = clock();
         if (child_pid == 0) {
 
             // Child process: run program
@@ -440,14 +447,14 @@ int infer(int (*f)(int, char**), int argc, char **argv) {
             debug_print(4,"[%d -> %d]\n", main_pid, getpid());
 
             f(argc, argv);
-            
-            if (ESTIMATE_MARGINAL_LIKELIHOOD) {            
+
+            if (ESTIMATE_MARGINAL_LIKELIHOOD) {
                 globals->log_marginal_likelihood += log_sum_exp(globals->log_weights, NUM_PARTICLES) - log(NUM_PARTICLES);
             }
-            
+
             if (!WEIGHTED_OUTPUT) {
                 observe(0); // "dummy" observe to mark end of program.
-                
+
                 double excess_weight = log_sum_exp(globals->log_weights, NUM_PARTICLES) - log(NUM_PARTICLES);
                 if (excess_weight > 0) {
                     multinomial_resample();
@@ -475,7 +482,7 @@ int infer(int (*f)(int, char**), int argc, char **argv) {
             }
 
             cleanup_children(locals->live_offspring_count, &locals->live_offspring_count);
-            
+
             pthread_mutex_lock(&globals->exec_complete_mutex);
             globals->exec_complete_counter++;
             if (globals->exec_complete_counter == NUM_PARTICLES) {
@@ -490,13 +497,14 @@ int infer(int (*f)(int, char**), int argc, char **argv) {
             utstring_free(locals->predict);
             exit(1);
         } else {
+         fprintf(fp, "%lu, ", (end - start));
             locals->live_offspring_count++;
         }
 
         // This is the parent process
         assert(child_pid > 0);
     }
-    
+
     pthread_mutex_lock(&globals->exec_complete_mutex);
     while (globals->exec_complete_counter < NUM_PARTICLES) {
         debug_print(2, "Blocking on exec complete cond in main process: %d of %d complete\n", globals->exec_complete_counter, NUM_PARTICLES);
@@ -558,4 +566,3 @@ void parse_args(int argc, char **argv) {
 
     debug_print(1, "Running SMC with %d particles\n", NUM_PARTICLES);
 }
-
