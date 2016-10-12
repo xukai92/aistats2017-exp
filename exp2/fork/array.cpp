@@ -11,8 +11,8 @@
 
 using namespace std;
 
-const int NUM = 10;     // number of processes to fork
-const int DEPTH = 50;   // depth of the Fibonacci sequence
+const int NUM = 1;     // number of processes to fork
+const int DEPTH = 1000;   // depth of the Fibonacci sequence
 
 int main() {
     int seq[DEPTH];         // an array to store the Fib seq
@@ -35,10 +35,10 @@ int main() {
             end = clock();      // record the end time
 
             if (pid) {
-                // Kill the forked processes
-                if (pid != -1) kill(pid, SIGKILL);
                 // Write the elapsed time to the CSV file
                 file << double(end - start) / CLOCKS_PER_SEC;
+                // Kill the forked processes
+                if (pid != -1) kill(pid, SIGKILL);
                 if (ith < NUM - 1) file << ';';
             } else {
                 pause();
