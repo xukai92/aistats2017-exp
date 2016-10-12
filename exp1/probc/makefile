@@ -17,14 +17,14 @@ LIBS=-lpthread -lm -lrt
 endif
 
 all: engine examples
-	
+
 examples: gaussian-unknown-mean coin-flip tricky-coin hmm big-hmm linear-gaussian crp simple-branching priors
 
 $(ODIR):
 	test -d $(ODIR) || mkdir $(ODIR)
 
 mtrand: ext/mtrand/*.c | $(ODIR)
-	cd ext/mtrand && $(CC) -c randomkit.c distributions.c 
+	cd ext/mtrand && $(CC) -c randomkit.c distributions.c
 
 engine: src/*.c mtrand | $(ODIR)
 	$(CC) -c src/erp.c -o src/erp.o $(HEADERS)

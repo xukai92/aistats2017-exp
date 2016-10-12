@@ -1,3 +1,10 @@
+// #include "malloc_count.h"
+// #include "stack_count.h"
+//
+// #include <stdlib.h>
+// #include <stdio.h>
+// #include <string.h>
+
 #include <assert.h>
 #include <fcntl.h>    /* For O_* constants */
 #include <getopt.h>
